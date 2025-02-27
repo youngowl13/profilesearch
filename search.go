@@ -18,12 +18,13 @@ import (
 
 // --- Constants ---
 const (
-	googleSearchURLBase   = "https://www.google.com/search?q=site:linkedin.com/in+"
-	maxPagesToScrape      = 2   // Keep it VERY low to avoid being blocked
+	// Use a clean base URL.
+	googleSearchURLBase   = "https://www.google.com/search"
+	maxPagesToScrape      = 2 // Keep it VERY low to avoid being blocked
 	retryAttempts         = 3
 	retryDelay            = 5 * time.Second
-	nameSelector          = ".e2BEnf.hAyfcb .AP7Wnd"            // Selector for name (needs refining)
-	profileLinkSelector   = "a[href*='linkedin.com/in/']"        // Robust profile link selector
+	nameSelector          = ".e2BEnf.hAyfcb .AP7Wnd"             // Selector for name (needs refining)
+	profileLinkSelector   = "a[href*='linkedin.com/in/']"         // Robust profile link selector
 	googleSnippetSelector = ".VwiC3b.yXK7lf.MUxGbd.yDYNvb.lyLwlc.lEBKkf" // Selector for Google snippet
 
 	// Regex patterns
@@ -43,14 +44,13 @@ type Candidate struct {
 	Experience int    `json:"experience"` // Experience in years, if found
 }
 
-// --- Functions ---
-
 // buildGoogleSearchURL constructs the Google search URL using the provided criteria.
 func buildGoogleSearchURL(keywords, location, industry, experienceRange string) string {
+	// Build the query string.
 	query := fmt.Sprintf("site:linkedin.com/in %s %s %s %s", keywords, location, industry, experienceRange)
 	params := url.Values{}
 	params.Add("q", query)
-	searchURL := googleSearchURLBase + params.Encode()
+	searchURL := googleSearchURLBase + "?" + params.Encode()
 	return searchURL
 }
 
@@ -102,16 +102,16 @@ func scrapeProfileDetails(profileURL string) (Candidate, error) {
 	candidate.ProfileURL = profileURL
 
 	// Use random delay to mimic human behavior.
-	delay := time.Duration(rand.Intn(10)+5) * time.Second // Random delay between 5 and 14 seconds
+	delay := time.Duration(rand.Intn(10)+5) * time.Second // Delay between 5 and 14 seconds.
 	time.Sleep(delay)
-	client := getProxyClient() // Use a proxy client
+	client := getProxyClient() // Use proxy client if available.
 
 	req, err := http.NewRequest("GET", profileURL, nil)
 	if err != nil {
 		return candidate, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set necessary headers.
+	// Set headers.
 	req.Header = getHeaders()
 	req.Header.Set("Referer", "https://www.google.com/")
 
@@ -135,10 +135,10 @@ func scrapeProfileDetails(profileURL string) (Candidate, error) {
 	}
 
 	// For public profiles, the selector might be different.
-	nameSelectorPublic := ".top-card-layout__title" // Example selector (adjust as needed)
+	nameSelectorPublic := ".top-card-layout__title" // Example selector (adjust as needed).
 	candidate.Name = strings.TrimSpace(doc.Find(nameSelectorPublic).Text())
 
-	// Attempt to extract email and phone via regex from the whole page HTML.
+	// Attempt to extract email and phone via regex from the entire page HTML.
 	html, _ := doc.Html()
 	candidate.Email = extractRegex(html, emailRegex)
 	candidate.Phone = extractRegex(html, phoneRegex)
@@ -146,7 +146,7 @@ func scrapeProfileDetails(profileURL string) (Candidate, error) {
 	return candidate, nil
 }
 
-// extractRegex is a helper function that extracts a substring matching the regex from the provided text.
+// extractRegex extracts a substring matching the regex from the provided text.
 func extractRegex(text, regex string) string {
 	re := regexp.MustCompile(regex)
 	return re.FindString(text)
@@ -166,12 +166,13 @@ func parseExperience(experienceStr string) (int, error) {
 	return 0, fmt.Errorf("experience not found in string: %s", experienceStr)
 }
 
-// getProxyClient returns an HTTP client configured to use a random proxy from a predefined list.
+// getProxyClient returns an HTTP client configured to use a proxy if valid proxies are provided.
+// If no valid proxy is available, it returns the default HTTP client.
 func getProxyClient() *http.Client {
-	// Replace with your actual proxy addresses.
-	proxyList := []string{
-		"http://your-proxy-1:port",
-		"http://your-proxy-2:port",
+	// If you have proxies, add valid proxy URLs here.
+	proxyList := []string{} // Leave empty if you don't need a proxy.
+	if len(proxyList) == 0 {
+		return &http.Client{Timeout: 10 * time.Second}
 	}
 
 	proxyURL, err := url.Parse(proxyList[rand.Intn(len(proxyList))])
@@ -181,10 +182,7 @@ func getProxyClient() *http.Client {
 	}
 
 	transport := &http.Transport{Proxy: http.ProxyURL(proxyURL)}
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   10 * time.Second,
-	}
+	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
 	return client
 }
 
@@ -248,7 +246,7 @@ func main() {
 	industry := "Machinery Manufacturing"
 	experienceRange := "7-12 years"
 
-	// --- Build Search URL ---
+	// Build the Google search URL.
 	searchURL := buildGoogleSearchURL(keywords, location, industry, experienceRange)
 	fmt.Printf("Searching Google with URL: %s\n", searchURL)
 
@@ -312,13 +310,14 @@ func main() {
 			continue
 		}
 
-		// Optionally scrape additional details from each candidate's LinkedIn profile.
+		// Optionally, scrape additional details from each candidate's LinkedIn profile.
 		for i, cand := range candidates {
 			fmt.Printf("Scraping details for candidate %d: %s\n", i+1, cand.ProfileURL)
 			detailedCandidate, err := scrapeProfileDetails(cand.ProfileURL)
 			if err != nil {
 				log.Printf("Error scraping profile details for %s: %v", cand.ProfileURL, err)
 			} else {
+				// Update candidate details if profile scraping succeeds.
 				cand.Name = detailedCandidate.Name
 				cand.Email = detailedCandidate.Email
 				cand.Phone = detailedCandidate.Phone
@@ -334,7 +333,6 @@ func main() {
 		return
 	}
 
-	// Use short variable declaration here to handle the error.
 	if err := writeToCSV(allCandidates, outputFilename); err != nil {
 		log.Fatalf("Error writing CSV: %v", err)
 	}
