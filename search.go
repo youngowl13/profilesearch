@@ -18,18 +18,17 @@ import (
 
 // --- Constants ---
 const (
-	googleSearchURLBase  = "https://www.google.com/search?q=site:linkedin.com/in+"
-	maxPagesToScrape     = 2   // Keep it VERY low to avoid being blocked
-	retryAttempts        = 3
-	retryDelay           = 5 * time.Second
-	// Selectors - These are for Google Search results, not LinkedIn profiles directly.
-	nameSelector           = ".e2BEnf.hAyfcb .AP7Wnd"            // Selector for name (needs refining)
-	profileLinkSelector    = "a[href*='linkedin.com/in/']"        // Robust profile link selector
-	googleSnippetSelector  = ".VwiC3b.yXK7lf.MUxGbd.yDYNvb.lyLwlc.lEBKkf" // Selector for Google snippet
+	googleSearchURLBase   = "https://www.google.com/search?q=site:linkedin.com/in+"
+	maxPagesToScrape      = 2   // Keep it VERY low to avoid being blocked
+	retryAttempts         = 3
+	retryDelay            = 5 * time.Second
+	nameSelector          = ".e2BEnf.hAyfcb .AP7Wnd"            // Selector for name (needs refining)
+	profileLinkSelector   = "a[href*='linkedin.com/in/']"        // Robust profile link selector
+	googleSnippetSelector = ".VwiC3b.yXK7lf.MUxGbd.yDYNvb.lyLwlc.lEBKkf" // Selector for Google snippet
 
 	// Regex patterns
-	emailRegex     = `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`
-	phoneRegex     = `\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}` // Basic US phone number regex (adapt as needed)
+	emailRegex      = `[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`
+	phoneRegex      = `\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}` // Basic US phone number regex (adapt as needed)
 	experienceRegex = `(\d+)\s+year[s]?`                     // Regex to extract experience in years
 
 	outputFilename = "linkedin_candidates.csv" // CSV output filename
@@ -48,7 +47,6 @@ type Candidate struct {
 
 // buildGoogleSearchURL constructs the Google search URL using the provided criteria.
 func buildGoogleSearchURL(keywords, location, industry, experienceRange string) string {
-	// Construct the search query for Google.
 	query := fmt.Sprintf("site:linkedin.com/in %s %s %s %s", keywords, location, industry, experienceRange)
 	params := url.Values{}
 	params.Add("q", query)
@@ -64,7 +62,7 @@ func scrapeGoogleSearchResults(doc *goquery.Document) ([]Candidate, error) {
 		// Get the LinkedIn profile link.
 		profileLink, ok := s.Find(profileLinkSelector).Attr("href")
 		if !ok {
-			return // Skip if no profile link is found.
+			return
 		}
 
 		// Clean the profile link using regex.
@@ -73,7 +71,7 @@ func scrapeGoogleSearchResults(doc *goquery.Document) ([]Candidate, error) {
 		if len(match) > 1 {
 			profileLink = match[1]
 		} else {
-			return // Skip if the link doesn't match the expected pattern.
+			return
 		}
 
 		// Extract the name using the specified selector.
@@ -174,7 +172,6 @@ func getProxyClient() *http.Client {
 	proxyList := []string{
 		"http://your-proxy-1:port",
 		"http://your-proxy-2:port",
-		// ... add more proxies if available
 	}
 
 	proxyURL, err := url.Parse(proxyList[rand.Intn(len(proxyList))])
@@ -238,11 +235,10 @@ func writeToCSV(candidates []Candidate, filename string) error {
 }
 
 func main() {
-	// Seed the random generator.
 	rand.Seed(time.Now().UnixNano())
 
 	// --- Configuration ---
-	// In this example, the code searches for LinkedIn profiles of professionals who:
+	// Searching for LinkedIn profiles of professionals who:
 	// - Work with "control valve desuperheater"
 	// - Are based in Bangalore
 	// - Operate in the "Machinery Manufacturing" industry
@@ -276,9 +272,9 @@ func main() {
 
 		// Retry logic for fetching the page.
 		for attempt := 0; attempt < retryAttempts; attempt++ {
-			req, err := http.NewRequest("GET", pageURL, nil)
-			if err != nil {
-				log.Printf("Error creating request: %v", err)
+			req, reqErr := http.NewRequest("GET", pageURL, nil)
+			if reqErr != nil {
+				log.Printf("Error creating request: %v", reqErr)
 				continue
 			}
 			req.Header = getHeaders()
@@ -303,7 +299,6 @@ func main() {
 			continue
 		}
 
-		// Parse the search results page.
 		doc, err := goquery.NewDocumentFromReader(resp.Body)
 		resp.Body.Close()
 		if err != nil {
@@ -311,21 +306,19 @@ func main() {
 			continue
 		}
 
-		// Extract candidates from the Google results.
 		candidates, err := scrapeGoogleSearchResults(doc)
 		if err != nil {
 			log.Printf("Error scraping candidates from page %d: %v", page+1, err)
 			continue
 		}
 
-		// Optionally, scrape additional details from each candidate's LinkedIn profile.
+		// Optionally scrape additional details from each candidate's LinkedIn profile.
 		for i, cand := range candidates {
 			fmt.Printf("Scraping details for candidate %d: %s\n", i+1, cand.ProfileURL)
 			detailedCandidate, err := scrapeProfileDetails(cand.ProfileURL)
 			if err != nil {
 				log.Printf("Error scraping profile details for %s: %v", cand.ProfileURL, err)
 			} else {
-				// Update candidate details if profile scraping succeeds.
 				cand.Name = detailedCandidate.Name
 				cand.Email = detailedCandidate.Email
 				cand.Phone = detailedCandidate.Phone
@@ -341,9 +334,8 @@ func main() {
 		return
 	}
 
-	// Write all candidate data to the CSV file.
-	err = writeToCSV(allCandidates, outputFilename)
-	if err != nil {
+	// Use short variable declaration here to handle the error.
+	if err := writeToCSV(allCandidates, outputFilename); err != nil {
 		log.Fatalf("Error writing CSV: %v", err)
 	}
 
